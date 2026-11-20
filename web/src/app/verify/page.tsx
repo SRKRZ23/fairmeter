@@ -45,7 +45,8 @@ function Verifier() {
   }
 
   const result = useQuery({
-    queryKey: ["verify", signed?.receiptHash],
+    // Key on the whole receipt, not its claimed hash: an edited receipt keeps the old receiptHash field.
+    queryKey: ["verify", signed ? JSON.stringify(signed) : null],
     enabled: Boolean(signed && client),
     queryFn: async () => {
       const s = signed!;

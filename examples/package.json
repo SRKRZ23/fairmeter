@@ -10,7 +10,8 @@
     "read-payments": "tsx --env-file-if-exists=.env src/read-payments.ts",
     "typecheck": "tsc --noEmit",
     "publish-pq-key": "tsx --env-file-if-exists=.env src/publish-pq-key.ts",
-    "agent": "tsx --env-file-if-exists=.env src/agent.ts"
+    "agent": "tsx --env-file-if-exists=.env src/agent.ts",
+    "e2e": "tsx --env-file-if-exists=.env src/e2e-browser.ts"
   },
   "dependencies": {
     "@aevum-kit/aevum": "workspace:*",
