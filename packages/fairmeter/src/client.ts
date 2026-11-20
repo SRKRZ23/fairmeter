@@ -24,6 +24,8 @@ export interface AgentConfig {
   fetch?: typeof fetch;
 }
 
+export type AskStep = "quote" | "policy" | "sign" | "serve" | "verify";
+
 export interface AskResult {
   answer: string;
   quote: Quote;
@@ -67,8 +69,13 @@ export function createAgent(cfg: AgentConfig) {
     if (q.deadline <= now || q.deadline - now > (cfg.policy.maxDeadlineSeconds ?? 900)) bad("deadline out of range");
   }
 
-  async function ask(prompt: string, opts: { maxTokens?: number } = {}): Promise<AskResult> {
+  async function ask(
+    prompt: string,
+    opts: { maxTokens?: number; onStep?: (step: AskStep, detail?: unknown) => void } = {},
+  ): Promise<AskResult> {
     const maxTokens = opts.maxTokens ?? 512;
+    const step = opts.onStep ?? (() => {});
+    step("quote");
     const body = JSON.stringify({ mandateId: cfg.mandateId.toString(), prompt, maxTokens });
     const headers = { "content-type": "application/json" };
 
@@ -78,7 +85,9 @@ export function createAgent(cfg: AgentConfig) {
       throw new FairMeterError(err.error ?? `Expected 402, got ${first.status}`, err.code ?? "NO_QUOTE", err);
     }
     const { quote } = (await first.json()) as { quote: Quote };
+    step("policy", quote);
     vet(quote, prompt, maxTokens);
+    step("sign", quote);
 
     const signature: Hex = await signUsage(cfg.agent, cfg.chain.id, cfg.meter, {
       mandateId: BigInt(quote.mandateId),
@@ -94,11 +103,13 @@ export function createAgent(cfg: AgentConfig) {
       nonce: quote.nonce,
       signature,
     });
+    step("serve", quote);
     const paid = await f(cfg.endpoint, { method: "POST", headers: { ...headers, [AUTH_HEADER]: auth }, body });
     const out = await paid.json();
     if (!paid.ok) throw new FairMeterError(out.error ?? `Request failed (${paid.status})`, out.code ?? "FAILED", out);
 
     const signed = out.receipt as SignedReceipt;
+    step("verify", signed);
     const pqKeyHash = (await client.readContract({
       address: cfg.meter,
       abi: fairMeterAbi,
