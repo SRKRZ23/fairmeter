@@ -13,6 +13,7 @@
   },
   "include": [
     "src",
-    "../packages/aevum/src"
+    "../packages/aevum/src",
+    "../packages/fairmeter/src"
   ]
 }

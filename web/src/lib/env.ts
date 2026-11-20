@@ -10,6 +10,8 @@ export interface Network {
   chain: Chain;
   /** Your Checkout on this network, if you deployed one. */
   checkout?: Address;
+  /** The FairMeter contract on this network. */
+  fairmeter?: Address;
   /** Only scan events from this block onward on the Activity page. */
   deployBlock?: bigint;
   /** Explorer links only make sense on the real testnet. */
@@ -26,6 +28,7 @@ const all: Record<NetworkKey, Network> = {
     label: "Aevum testnet",
     chain: aevumTestnet,
     checkout: address(process.env.NEXT_PUBLIC_CHECKOUT_AEVUM),
+    fairmeter: address(process.env.NEXT_PUBLIC_FAIRMETER_AEVUM),
     deployBlock: block(process.env.NEXT_PUBLIC_DEPLOY_BLOCK_AEVUM),
     hasExplorer: true,
   },
@@ -34,6 +37,7 @@ const all: Record<NetworkKey, Network> = {
     label: "Local fork",
     chain: aevumFork,
     checkout: address(process.env.NEXT_PUBLIC_CHECKOUT_FORK),
+    fairmeter: address(process.env.NEXT_PUBLIC_FAIRMETER_FORK),
     deployBlock: block(process.env.NEXT_PUBLIC_DEPLOY_BLOCK_FORK),
     hasExplorer: false,
   },

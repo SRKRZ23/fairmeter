@@ -8,11 +8,14 @@
     "check-setup": "tsx --env-file-if-exists=.env src/check-setup.ts",
     "pay-gasless": "tsx --env-file-if-exists=.env src/pay-gasless.ts",
     "read-payments": "tsx --env-file-if-exists=.env src/read-payments.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "publish-pq-key": "tsx --env-file-if-exists=.env src/publish-pq-key.ts",
+    "agent": "tsx --env-file-if-exists=.env src/agent.ts"
   },
   "dependencies": {
     "@aevum-kit/aevum": "workspace:*",
-    "viem": "2.57.12"
+    "viem": "2.57.12",
+    "@fairmeter/sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
