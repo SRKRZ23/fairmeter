@@ -6,6 +6,7 @@ budget instead of a wallet. For every request the agent signs a price *ceiling*;
 key and with a post-quantum ML-DSA-65 key whose hash is published on-chain.
 
 - **Live app:** https://fairmeter.vercel.app (Aevum testnet, test tokens only)
+- **Demo video:** https://youtu.be/N52n2YS4xRk
 - **Contract:** [`0x347bB333a61B804C27B17a949fE763b4BA572380`](https://explorer-test.qday.info/address/0x347bB333a61B804C27B17a949fE763b4BA572380) on Aevum (chain 44005)
 - **Track:** Aevum Builder Challenge #1 · Native AI Assistants / Decentralized Payments
 
@@ -15,7 +16,7 @@ key and with a post-quantum ML-DSA-65 key whose hash is published on-chain.
 | Cheapest outcome | a prompt-injection attempt, blocked for 0.00002 tUSD8 (only the safety check is billed) |
 | Escalation | a modular-arithmetic question the cheap model graded 1/5 went to the 120B model: correct answer, 0.0345 of 0.042 authorized |
 | Tests | 27 contract tests (incl. fuzzed money conservation) · 2 fork tests on the real tUSD8 · 8 SDK tests (incl. the EIP-712 digest checked against the deployed contract) · a browser end-to-end test of the live app (below) |
-| Demo video | a recorded run of that end-to-end test on the live app (link in the DoraHacks submission) |
+| Demo video | https://youtu.be/N52n2YS4xRk (2:54, a recorded run of the end-to-end test on the live app) |
 
 ---
 
