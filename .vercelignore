@@ -1,0 +1,12 @@
+# Never upload secrets or build output
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/.next
+.git
+contracts/lib
+contracts/out
+contracts/cache
+contracts/broadcast
+scripts

@@ -1,309 +1,263 @@
-# Aevum Starter Kit
+# FairMeter
 
-Everything you need to build and demo a stablecoin app on **QDay Aevum testnet** (chain `44005`):
+**Pay-per-request AI for agents, settled in tUSD8 on QDay Aevum.** An owner gives an AI agent a capped, revocable
+budget instead of a wallet. For every request the agent signs a price *ceiling*; the provider answers, charges the
+*actual* cost (usually a small fraction of the ceiling), and proves it with a receipt signed twice: with an Ethereum
+key and with a post-quantum ML-DSA-65 key whose hash is published on-chain.
 
-- **Contracts (Foundry):** `Checkout.sol`, a minimal pay-per-order contract with two payment modes, plus tests that run against the real tUSD8 on a local fork.
-- **Web app (Next.js):** a setup checker, a checkout with standard and gasless payments, on-chain receipts and an activity feed. Connect with MetaMask, Rabby, any browser wallet, or WalletConnect.
-- **TypeScript examples:** sign and relay a gasless payment, read events past the 1,000-block log limit, and check a wallet's setup.
-- **`@aevum-kit/aevum`:** chain config, ABIs and helpers shared by all of the above. Import it in your own code.
-
-Fork it, rename `Checkout` into whatever you're building (an invoice, a ticket, payroll, a pledge), and keep the plumbing.
-
-> **Judging counts activity on Aevum.** Contracts, payments and transfers must happen on Aevum testnet. Settling only on another chain (for example x402 on Base) doesn't count.
-
----
-
-## Contents
-
-- [Quickstart (5 minutes, no funds needed)](#quickstart-5-minutes-no-funds-needed)
-- [Network details](#network-details)
-- [Get test tokens](#get-test-tokens)
-- [Deploy to Aevum testnet](#deploy-to-aevum-testnet)
-- [Deploy the web app to Vercel](#deploy-the-web-app-to-vercel)
-- [How the checkout works](#how-the-checkout-works)
-- [Things that differ from Ethereum](#things-that-differ-from-ethereum)
-- [Project layout](#project-layout)
-- [Commands](#commands)
-- [Submitting your project](#submitting-your-project)
-- [FAQ](#faq)
-
----
-
-## Quickstart (5 minutes, no funds needed)
-
-You need [Node 22+](https://nodejs.org), [pnpm](https://pnpm.io/installation) and [Foundry](https://book.getfoundry.sh/getting-started/installation) (`foundryup`).
-
-```bash
-git clone --recursive https://github.com/qday-io/aevum-starter-kit.git
-cd aevum-starter-kit
-make install          # Solidity libs + JS packages
-make check            # build, Shanghai opcode check, unit tests, fork tests
-```
-
-Run the whole app against a **local copy of Aevum**, with the real tUSD8 and free test balances:
-
-```bash
-# terminal 1: local copy of Aevum testnet on 127.0.0.1:8555 (chain 440050)
-make fork
-
-# terminal 2: deploy Checkout and give yourself test money
-make deploy-fork                      # prints the Checkout address
-make deal TO=<your wallet address>    # 100 tUSD8 + 10 tQDAY, on the fork only
-
-cp web/.env.example web/.env.local
-#   NEXT_PUBLIC_NETWORKS=fork,aevum
-#   NEXT_PUBLIC_CHECKOUT_FORK=<address from deploy-fork>
-#   RELAYER_PRIVATE_KEY=<a test key, see below>   (optional: enables gasless mode)
-make dev                              # http://localhost:3000
-```
-
-Use the **Local fork / Aevum testnet** switcher in the app's header. The first time you pick the fork, your wallet offers to add "Aevum fork (local)" as a new network; after that, switching is one click and your real testnet network stays untouched.
-
-**Why the fork has its own chain ID (440050):** it copies Aevum's state (accounts, balances, tUSD8) but anything you sign there, such as an EIP-3009 authorization or a permit, can't be replayed on the real testnet, and wallets never mix the two up. `make deploy-fork` also deploys from a random address nobody has the key to, so its contract addresses can't be claimed on the real testnet.
-
-For a local relayer, any of anvil's [default test accounts](https://book.getfoundry.sh/anvil/#getting-started) works. Those keys are public, so the relayer refuses them on any chain but `make fork` and `make anvil`. When you add `aevum`, put a fresh test wallet's key in `RELAYER_PRIVATE_KEY` instead.
-
-Want an empty chain instead of a fork? `make anvil` + `make deploy-local` deploys a `MockUSD8` (same decimals, EIP-712 domain and EIP-3009 functions as tUSD8) that anyone can mint with `make mint`.
-
----
-
-## Network details
+- **Live app:** https://fairmeter.vercel.app (Aevum testnet, test tokens only)
+- **Contract:** [`0x347bB333a61B804C27B17a949fE763b4BA572380`](https://explorer-test.qday.info/address/0x347bB333a61B804C27B17a949fE763b4BA572380) on Aevum (chain 44005)
+- **Track:** Aevum Builder Challenge #1 · Native AI Assistants / Decentralized Payments
 
 | | |
 |---|---|
-| Network | QDay Aevum Testnet |
-| Chain ID | `44005` |
-| RPC | `https://rpc-test.qday.info` (HTTPS only, no WebSocket) |
-| Explorer | https://explorer-test.qday.info |
-| Gas token | tQDAY (18 decimals) |
-| Gas price | about 1 gwei. 1 tQDAY covers hundreds of contract calls. |
-| EVM version | **Shanghai** |
-| tUSD8 | [`0x456569838f1d43009A91ebA4263147Afd7233483`](https://explorer-test.qday.info/address/0x456569838f1d43009A91ebA4263147Afd7233483), 6 decimals, USDC-style (EIP-2612 `permit`, EIP-3009 signed transfers), EIP-712 domain `name: "tUSD8"`, `version: "2"` |
-| Multicall3 | `0xcA11bde05977b3631167028862bE2a173976CA11` |
-
-All of this is in [`packages/aevum/src/chain.ts`](packages/aevum/src/chain.ts) and [`contracts.ts`](packages/aevum/src/contracts.ts).
+| Measured on Aevum (Nov 20) | 7 paid requests: agents authorized 0.6535 tUSD8, the provider charged 0.0878 tUSD8 (13.4%). Live totals: [Activity](https://fairmeter.vercel.app/activity) |
+| Cheapest outcome | a prompt-injection attempt, blocked for 0.00002 tUSD8 (only the safety check is billed) |
+| Escalation | a modular-arithmetic question the cheap model graded 1/5 went to the 120B model: correct answer, 0.0345 of 0.042 authorized |
+| Tests | 27 contract tests (incl. fuzzed money conservation) · 2 fork tests on the real tUSD8 · 8 SDK tests (incl. the EIP-712 digest checked against the deployed contract) |
 
 ---
 
-## Get test tokens
+## The problem
 
-- **Discord faucet (for Builder Challenge participants):** join the [QDay Discord](https://discord.gg/bYPhjmrSfK), react ✅ in `#verify`, then run `/faucet <your address>`. You get **1 tQDAY + 5 tUSD8**, once per Discord account and once per address. No Ethereum mainnet balance needed.
-- **Web faucet:** https://faucet.qday.info. Check the page for its rules.
-- **Local fork:** `make deal TO=<address>` for unlimited test balances. Nothing leaves your machine.
+An agent that calls paid AI or data APIs cannot know a request's price in advance: it depends on prompt length,
+output length and which model ends up answering. Today that leaves two bad options:
 
-1 tQDAY is plenty for development: deploying `Checkout` costs well under 0.01 tQDAY.
+1. **Give the agent a wallet key.** A bug, a leaked key or a prompt injection ("send the remaining budget to 0x…")
+   can drain everything the key controls.
+2. **Prepay the provider.** The money is locked in one vendor's account, usage is opaque, and you trust their bill.
 
----
+Per-request payment flows such as x402 assume a fixed price per call. Metered AI needs **authorize a maximum,
+charge the actual**, the way card networks do authorization and capture, but enforced by a contract and auditable
+by anyone.
 
-## Deploy to Aevum testnet
+## How it works
 
-Keep your deployer key out of files and shell history. Foundry's encrypted keystore asks for the key once and a password each time:
+```mermaid
+flowchart LR
+  O["Owner wallet"] -- "open mandate: lock tUSD8, caps, expiry<br/>(1 signature, gasless)" --> M[("FairMeter on Aevum")]
+  A["Agent (session key)"] -- "1 POST, no payment" --> G["Gateway /api/v1/chat"]
+  G -- "2 402 Quote: ceiling bound to this prompt" --> A
+  A -- "3 retry with EIP-712 Usage(mandate, request, maxPrice, deadline)" --> G
+  G -- "4 check(): right agent? room under caps?" --> M
+  G -- "5 guard, cheap model, self-check, strong model if needed" --> L["LLMs (Groq)"]
+  G -- "6 answer + receipt (ECDSA + ML-DSA-65)" --> A
+  G -- "7 settle(actual charge, receiptHash)" --> M
+  M -- "charge" --> P["Provider"]
+  M -- "revoke: unspent balance back at once" --> O
+```
+
+**Owner.** Opens a *mandate*: tUSD8 locked for **one provider**, spendable only with **one agent key**, with a total
+cap, a per-request cap and an expiry. One EIP-3009 signature is enough (the provider relays it and pays the gas).
+The owner can revoke at any time and gets the unspent balance back in the same transaction, or rotate a leaked
+agent key.
+
+**Agent.** Holds only a session key. It asks for a quote (HTTP 402), checks it against its *own* policy (a lower
+per-request limit, the exact prompt, the right contract and provider), signs an EIP-712 `Usage` authorization and
+retries. Before trusting an answer it verifies the receipt: both signatures, the post-quantum key against the hash
+published on-chain, and charge ≤ authorized.
+
+**Provider.** Runs the gateway. Before any model runs it calls `FairMeter.check` on-chain (a dry run that verifies
+the agent's signature and the mandate's headroom). Then: a prompt-injection screen
+(`llama-prompt-guard-2-86m`), a cheap draft (`gpt-oss-20b`), a self-check by the cheap model, and the strong model
+(`gpt-oss-120b`) only if the grade is ≤ 3/5. Each model call is billed at its real token counts. The receipt is
+signed with ECDSA and ML-DSA-65; the charge is settled on Aevum right after the response is sent (Next.js `after()`).
+
+### One request, step by step
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Ag as Agent (session key)
+  participant Gw as Gateway
+  participant FM as FairMeter (Aevum)
+  participant LLM as Models
+  Ag->>Gw: POST /api/v1/chat {mandateId, prompt, maxTokens}
+  Gw->>FM: mandateOf, spendable
+  Gw-->>Ag: 402 Quote {requestId, maxPrice, deadline, nonce}
+  Note over Gw: requestId = keccak(secret, chain, meter, mandate,<br/>promptHash, maxTokens, maxPrice, deadline, nonce)<br/>stateless: no quote database
+  Ag->>Ag: policy: maxPrice ≤ my limit, same prompt, same contract
+  Ag->>Gw: same POST + x-fairmeter-authorization (EIP-712 signature)
+  Gw->>FM: check(mandate, request, maxPrice, deadline, maxPrice, provider, sig)
+  FM-->>Gw: Status.Ok
+  Gw->>LLM: guard → draft → self-check → (escalate)
+  Gw-->>Ag: answer + SignedReceipt (ECDSA + ML-DSA-65)
+  Ag->>Ag: verify both signatures, key hash on-chain, charge ≤ max
+  Gw->>FM: settle(mandate, request, maxPrice, deadline, charge, receiptHash, sig)
+  FM-->>FM: Settled event (receipt hash on-chain), charge → provider
+```
+
+## Safety model
+
+Each line is a test in [`contracts/test/FairMeter.t.sol`](contracts/test/FairMeter.t.sol) or
+[`packages/fairmeter/test/sdk.test.ts`](packages/fairmeter/test/sdk.test.ts).
+
+| Threat | What happens |
+|---|---|
+| Agent key stolen | The thief can only pay **the mandate's provider**, within the caps, until expiry; only the provider can call `settle`. The owner revokes or rotates the key in one transaction. (`test_stolenAgentKey_cannotPayAnyoneElse`, `test_rotateAgent_oldKeyStops`) |
+| Prompt injection ("send the budget to 0x…") | Blocked by the guard before any model runs; costs 0.00002 tUSD8. Even if it got through, the money cannot go anywhere but the provider. |
+| Runaway agent loop | Total cap and per-request cap are enforced on-chain (`test_settle_capStopsRunawaySpending`); the agent also refuses quotes above its own lower limit. |
+| Provider overcharges | `charge ≤ maxPrice` signed by the agent (`test_settle_rejectsOverMaxPrice`, `test_settle_rejectsRaisedMaxPrice`). |
+| Provider charges twice | Each `requestId` settles once (`test_settle_onceOnly`). |
+| Cheap quote reused for a long prompt | The request id binds prompt hash, token budget, price, deadline and mandate (`request id binds every quoted term`). |
+| Authorization replayed on another mandate | The EIP-712 message includes the mandate id (`test_settle_signatureBoundToMandate`). |
+| Relayer changes the terms of a gasless opening | The EIP-3009 nonce is `openNonce(terms)`; any change invalidates the signature (`test_openWithAuthorization_relayerCannotChangeTerms`). |
+| Owner revokes while signatures are outstanding | Revocation is immediate; earlier signatures stop working (`test_revoke_refundsAndBlocksEarlierSignatures`). The provider's exposure is at most one request per in-flight call, because it settles right after answering. |
+| Forged or edited receipt | Changing any field breaks the hash and both signatures (`receipt: a tampered charge is detected`, `a re-hashed forgery fails both signatures`). |
+| Money lost or created | Fuzz test: provider income + mandate balance always equals the deposit, spent never exceeds the cap (`testFuzz_conservation`, 256 runs). |
+
+## QDay platform integration
+
+| Platform piece | How FairMeter uses it |
+|---|---|
+| **tUSD8 (EIP-3009)** | `openWithAuthorization` pulls funds with `receiveWithAuthorization`; the nonce commits to the mandate terms, so a relayer can sponsor gas without being able to alter anything. |
+| **tUSD8 (EIP-2612)** | `openWithPermit`: open a mandate in one transaction without a separate approve. |
+| **Agent payments / x402 pattern** | HTTP 402 quote → signed authorization header → paid response, settled on Aevum (not on another chain). |
+| **Smart accounts, session keys** | Agents can be EOAs or ERC-1271 smart accounts: a smart wallet's session key works unchanged (`test_smartAccountAgent_sessionKey`). Spending limits, expiry and revocation live in the contract. |
+| **Post-quantum roadmap (ML-DSA-65)** | Receipts carry an ML-DSA-65 (FIPS 204) signature. Until QDay's Phase 2 verification precompile is live, the provider publishes its key hash on-chain (`setReceiptKey`, full key in the event log) and anyone verifies off-chain. When the precompile ships, `settle` can verify the PQ signature on-chain with one `staticcall`. |
+| **Shanghai EVM** | `evm_version = shanghai`; the build runs the starter kit's opcode check (no `TSTORE`/`MCOPY`; storage-based `ReentrancyGuard`). |
+| **1,000-block log limit, no WebSocket** | The Activity and Verify pages read events with `getLogsChunked`; the client polls over HTTPS. |
+| **Legacy transactions** | The gateway and scripts send type-0 transactions, like QDay's own faucet. |
+
+## On-chain evidence (Aevum testnet, chain 44005)
+
+| What | Transaction |
+|---|---|
+| FairMeter deployed (block 3,635,646) | [`0xd32cc672…4ce9`](https://explorer-test.qday.info/tx/0xd32cc672e6849aed5620a2d38e5e6b4715369ac2122efd1dd52467333e654ce9) |
+| Provider publishes its ML-DSA-65 receipt key | [`0x255f7535…c111`](https://explorer-test.qday.info/tx/0x255f7535cd0cb02b183c1e48d649682d1d5eebe93d26aa73c5ab9324f5e7c111) |
+| Mandate #2 opened (2 tUSD8, 0.2 per request, 30 days) | [`0xd0345aab…7a3c`](https://explorer-test.qday.info/tx/0xd0345aab279c302349fcc517464f81a1f95bd3b2bd38d0855410e215c5917a3c) |
+| Easy question: cheap model, charged 0.002011 of 0.041704 | [`0xa0418139…f1b2`](https://explorer-test.qday.info/tx/0xa0418139b1cf5942f5a6f45c187c0a61b071c935591381efd9c6bdf31b9bf1b2) |
+| Hard question: escalated to 120B, charged 0.03453 of 0.04201 | [`0x0029ded7…14f1`](https://explorer-test.qday.info/tx/0x0029ded7e677d5f9f57e476500037078dfbf769086378850a540f89a103414f1) |
+| Prompt injection blocked, charged 0.00002 | [`0xc9340b9f…24a2`](https://explorer-test.qday.info/tx/0xc9340b9f2361b0f8a4510ca2c57d797a3090456359dc6ff36db6cc57c38724a2) |
+| Request through the live Vercel deployment | [`0x13eb4e18…77fd`](https://explorer-test.qday.info/tx/0x13eb4e1893cced0e9d35fe40061331d43643cd1ff31609a922fe9626580a77fd) |
+| Gasless mandate opening (#3): owner paid 0 gas | [`0xe08bd684…64da`](https://explorer-test.qday.info/tx/0xe08bd6846f7b9cd7c5343c804cf6bff7f5851ddf29f7ebc2db5baf5bb26164da) |
+| Mandate #1 revoked: 1.963 tUSD8 back to the owner | [`0x731b5f96…9ca7`](https://explorer-test.qday.info/tx/0x731b5f96fa970b456bdf75956275dd58af161be01fd861ce51b6301c5d0e9ca7) |
+
+The [Activity page](https://fairmeter.vercel.app/activity) lists every event, read straight from the chain.
+
+## Try it (5 minutes, browser)
+
+1. Add Aevum to MetaMask (RPC `https://rpc-test.qday.info`, chain `44005`, symbol `tQDAY`) and get tUSD8 from the
+   QDay Discord faucet (`/faucet <address>`). The [Setup page](https://fairmeter.vercel.app/setup) checks all of it.
+2. **Mandates** → lock 1 tUSD8, cap 1, 0.1 per request, 7 days → *Gasless* → sign once. No tQDAY needed.
+3. **Agent** → pick a preset (Easy, Hard, Attack) → *Ask and pay*. Watch the six steps, the token-level bill, the
+   authorized/charged/returned split, and the settlement transaction.
+4. **Verify** → the receipt passes 7 checks. Change one digit of the charge: the hash and both signatures fail.
+5. **Mandates** → *Revoke*: the unspent balance is back in your wallet in one transaction.
+
+## Use it from code
+
+```ts
+import { createAgent } from "@fairmeter/sdk";
+import { privateKeyToAccount } from "viem/accounts";
+import { aevumTestnet } from "@aevum-kit/aevum";
+
+const agent = createAgent({
+  endpoint: "https://fairmeter.vercel.app/api/v1/chat",
+  chain: aevumTestnet,
+  meter: "0x347bB333a61B804C27B17a949fE763b4BA572380",
+  mandateId: 2n,
+  agent: privateKeyToAccount(process.env.AGENT_PRIVATE_KEY as `0x${string}`), // the session key only
+  provider: "0x1af380e52295a73FE8694337E8fc5a333ad30ae0",
+  policy: { maxPerRequest: 50_000n }, // 0.05 tUSD8: the agent refuses pricier quotes
+});
+
+const { answer, signed, check } = await agent.ask("What does HTTP 402 mean?");
+// check = { hashOk, ecdsaOk, mldsaOk, pqKeyOnChain, withinMax, ok }
+const settled = await agent.waitSettled(signed.receipt.requestId); // { txHash, receiptHash }
+```
+
+The raw protocol, for any language:
 
 ```bash
-cast wallet import aevum-deployer --interactive   # paste the key of a TEST wallet
-cast wallet address --account aevum-deployer      # fund this address from the faucet
-
-make deploy-aevum ACCOUNT=aevum-deployer          # uses real tUSD8; MERCHANT defaults to the deployer
-# MERCHANT=0x... make deploy-aevum ACCOUNT=aevum-deployer   to send payments elsewhere
+# 1. ask for a quote
+curl -s -X POST https://fairmeter.vercel.app/api/v1/chat \
+  -H 'content-type: application/json' -d '{"mandateId":"2","prompt":"hi","maxTokens":256}'
+# -> 402 {"quote":{"requestId":"0x…","maxPrice":"…","deadline":…,"nonce":"0x…",…}}
+# 2. sign EIP-712 Usage(mandateId, requestId, maxPrice, deadline), domain {name:"FairMeter", version:"1", chainId:44005, verifyingContract}
+# 3. resend the same body with header  x-fairmeter-authorization: base64(JSON {mandateId, requestId, maxPrice, deadline, nonce, signature})
+# -> 200 {"answer":"…","receipt":{"receipt":{…},"receiptHash":"0x…","ecdsa":"0x…","mldsa":{…}},"settlement":"submitting"}
 ```
 
-Then set `NEXT_PUBLIC_CHECKOUT_AEVUM` in `web/.env.local` and add `aevum` to `NEXT_PUBLIC_NETWORKS`.
+`GET /api/v1/chat` returns the provider address, contract, prices and the receipt-key hash.
 
-**Putting the web app online:** see [Deploy the web app to Vercel](#deploy-the-web-app-to-vercel). The same settings apply to any other host.
+## Repository
 
-> Use a wallet made only for testing. Never paste a private key into chat, an issue, or a committed file.
+```
+contracts/src/FairMeter.sol         mandates, Usage authorizations, settle / settleBatch / check, revoke, receipt key
+contracts/test/                     27 unit + fuzz tests; fork tests against the real tUSD8 (test/fork)
+contracts/script/DeployFairMeter.s.sol
+packages/fairmeter/                 @fairmeter/sdk — protocol, EIP-712 usage, dual-signed receipts, pricing, agent client
+web/src/app/api/v1/chat/route.ts    the gateway (quote, on-chain check, routing, receipt, settlement)
+web/src/app/api/v1/open/route.ts    gasless mandate opening relay
+web/src/lib/gateway/                model calls with retries, confidence routing, server config
+web/src/app/{mandates,agent,verify,activity,setup}/   the app
+examples/src/agent.ts               an autonomous agent (Easy, Hard, Attack tasks)
+examples/src/publish-pq-key.ts      publish the provider's ML-DSA-65 key on-chain
+scripts/smoke-aevum.sh              one live cycle with cast: open, sign, settle, replay check, revoke
+packages/aevum/                     chain config and helpers from the Aevum Starter Kit
+```
 
-**Contract verification:** the explorer's verifier isn't working yet, so `forge verify-contract` will fail for now. Put your contract addresses and a link to the source (the exact commit) in your README and submission instead. The command, for when it's back:
+## Run it yourself
+
+Needs Node 22+, pnpm, Foundry.
 
 ```bash
-forge verify-contract <address> src/Checkout.sol:Checkout --chain-id 44005 \
-  --verifier blockscout --verifier-url https://explorer-test.qday.info/api/
+git clone --recursive https://github.com/SRKRZ23/fairmeter && cd fairmeter
+make install
+make check                      # build + Shanghai check + unit, fork and SDK tests + typecheck
+cp web/.env.example web/.env.local   # fill in the server variables below
+make dev                        # http://localhost:3000
 ```
 
----
-
-## Deploy the web app to Vercel
-
-Deploy your contract first ([above](#deploy-to-aevum-testnet)), then:
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fqday-io%2Faevum-starter-kit&root-directory=web&project-name=aevum-starter-kit&repository-name=aevum-starter-kit&env=NEXT_PUBLIC_NETWORKS%2CNEXT_PUBLIC_CHECKOUT_AEVUM%2CTRUSTED_IP_HEADER&envDefaults=%7B%22NEXT_PUBLIC_NETWORKS%22%3A%22aevum%22%2C%22TRUSTED_IP_HEADER%22%3A%22x-vercel-forwarded-for%22%7D&envDescription=Your%20Checkout%20address%20from%20%60make%20deploy-aevum%60.%20Add%20RELAYER_PRIVATE_KEY%20later%20in%20Project%20Settings%20to%20turn%20on%20gasless%20checkout.&envLink=https%3A%2F%2Fgithub.com%2Fqday-io%2Faevum-starter-kit%23deploy-the-web-app-to-vercel)
-
-The button copies this repo into your GitHub account and creates a Vercel project with **Root Directory** `web`. It asks for:
-
-| Variable | Value |
-|---|---|
-| `NEXT_PUBLIC_NETWORKS` | `aevum` (prefilled). Keep it to `aevum` online: with `fork` or `local`, visitors get a "Local fork" option that points at *their own* 127.0.0.1. |
-| `NEXT_PUBLIC_CHECKOUT_AEVUM` | Your Checkout address from `make deploy-aevum`. |
-| `TRUSTED_IP_HEADER` | `x-vercel-forwarded-for` (prefilled). The relayer rate-limits on this header, which Vercel sets and visitors can't fake. |
-
-Optional, in **Project Settings → Environment Variables** (then redeploy):
-
-| Variable | Value |
-|---|---|
-| `RELAYER_PRIVATE_KEY` | Turns on gasless checkout. A **fresh** wallet with a little tQDAY, never one that holds anything else, and never an anvil key (the relayer refuses those on Aevum). Mark it Sensitive. |
-| `NEXT_PUBLIC_DEPLOY_BLOCK_AEVUM` | Your deploy block. The Activity page starts scanning there. |
-| `NEXT_PUBLIC_WC_PROJECT_ID` | Enables WalletConnect (mobile wallets). Free at [cloud.reown.com](https://cloud.reown.com). |
-| `NEXT_PUBLIC_REPO_URL` | Your repo, for the Docs page's Source link. |
-
-Doing it by hand instead: **Add New → Project**, import your repo, set **Root Directory** to `web`, add the variables above, and deploy. Keep the whole repo connected (not just `web/`): the app imports `packages/aevum` through the pnpm workspace, and Vercel reads `pnpm-lock.yaml` at the repo root.
-
-> **The relayer's limits live in memory.** On Vercel each function instance has its own copy, so they slow down an attacker but don't stop one. Keep only a little tQDAY in the relayer, and move the limits to a shared store (for example Upstash Redis) if your app gets real traffic.
-
----
-
-## How the checkout works
-
-`Checkout` takes one token and one merchant address. Each `orderId` (any `bytes32`) can be paid once; the money goes straight to the merchant and the `Paid(orderId, payer, amount)` event is the receipt.
-
-**Standard** (two transactions, buyer pays gas):
-
-```
-buyer ── approve(Checkout, amount) ──▶ tUSD8
-buyer ── pay(orderId, amount) ───────▶ Checkout ── transferFrom ──▶ merchant
-```
-
-**Gasless** (one signature, the buyer needs no tQDAY):
-
-```
-buyer  ── signs ReceiveWithAuthorization(from, to=Checkout, value, validAfter, validBefore, nonce) ── off-chain
-relayer ── payWithAuthorization(orderId, from, amount, …, v, r, s) ──▶ Checkout
-           Checkout ── receiveWithAuthorization ──▶ tUSD8 ──▶ Checkout ──▶ merchant
-```
-
-Design choices you can reuse:
-
-- The signed `nonce` must equal `Checkout.authorizationNonce(orderId)`. That binds the signature to one order, so a relayer can't reuse it to mark a different order as paid.
-- `receiveWithAuthorization` (not `transferWithAuthorization`) means only the Checkout can pull the funds, so nobody can front-run the signature into a plain transfer.
-- The contract doesn't know prices. Your app decides what an order costs (`priceOf` in [`web/src/lib/order.ts`](web/src/lib/order.ts)) and checks `paymentOf(orderId)` **and its amount** before delivering.
-
-The web relayer ([`web/src/app/api/relay/route.ts`](web/src/app/api/relay/route.ts)) pays gas for anyone who calls it, so it has rails. Keep them if you build on it:
-
-- It only calls `payWithAuthorization` on your Checkout, never anything else.
-- It only relays the price your app set for that order. Otherwise anyone could burn your gas with 0.000001 tUSD8 payments.
-- It skips orders that are already paid or already being submitted, and simulates before sending.
-- It refuses anvil's public keys on a real network, caps the signature window at 1 hour, and rate-limits per IP and per payer with a daily cap.
-- **The limits live in memory.** That works for `next start` on one server. On serverless hosts each instance has its own copy, so move them to a shared store (Redis, your database) before going live. Set `TRUSTED_IP_HEADER` to your host's client-IP header (`x-vercel-forwarded-for` on Vercel, `cf-connecting-ip` behind Cloudflare).
-
-Known limits of this example contract, worth fixing in yours:
-
-- **Anyone can pay any order, with any amount.** `pay(orderId, 1)` marks an order as paid for 0.000001 tUSD8, and can front-run the real buyer (whose transaction then reverts with `AlreadyPaid`). Never ship on `isPaid` alone: compare the amount (and the payer, if it matters). For production, key payments by `keccak256(payer, orderId)` or have the merchant sign each quote.
-- Use unguessable order ids (the app uses random 32 bytes). Sequential invoice numbers can be claimed in advance.
-- The merchant is fixed at deploy time, and tokens sent straight to the contract are stuck.
-
-Code to read, in order:
-
-1. [`contracts/src/Checkout.sol`](contracts/src/Checkout.sol)
-2. [`contracts/test/Checkout.t.sol`](contracts/test/Checkout.t.sol): every rule above as a test
-3. [`contracts/test/fork/AevumFork.t.sol`](contracts/test/fork/AevumFork.t.sol): the same flows against the real tUSD8
-4. [`examples/src/pay-gasless.ts`](examples/src/pay-gasless.ts): sign + relay in about 40 lines
-5. [`web/src/app/checkout/page.tsx`](web/src/app/checkout/page.tsx): both modes in the UI
-
----
-
-## Things that differ from Ethereum
-
-| | What happens | What to do |
+| Variable | Where | What |
 |---|---|---|
-| **Shanghai EVM** | Cancun opcodes (`MCOPY`, `TSTORE`/`TLOAD`, blob ops) don't exist. Code compiled for Cancun deploys fine, then reverts with `invalid opcode`. | Keep `evm_version = "shanghai"` in `foundry.toml` (already set). `make build` runs [`tools/check-shanghai.mjs`](tools/check-shanghai.mjs) to catch it. Don't use OpenZeppelin's `*Transient` contracts. |
-| **anvil hides it** | A plain `anvil --fork-url` runs Cancun, so bad bytecode passes local tests. | Always add `--hardfork shanghai` (the Makefile does). |
-| **1,000-block log limit** | `eth_getLogs` over more than 1,000 blocks fails. | Use `getLogsChunked` from `@aevum-kit/aevum`. Store your deploy block and start from there. |
-| **No WebSocket RPC** | `watchContractEvent` over WS won't connect. | Poll over HTTPS (viem's default for `http()` transports). |
-| **Explorer verification** | Not working yet. | See [Deploy](#deploy-to-aevum-testnet). |
-| **Legacy transactions** | The kit's scripts and relayer send legacy (type 0) transactions, the same as QDay's own faucet. | `--legacy` in `forge script`, `type: "legacy"` in viem. |
+| `NEXT_PUBLIC_FAIRMETER_AEVUM` | browser | FairMeter address (prefilled with the live one) |
+| `NEXT_PUBLIC_DEPLOY_BLOCK_AEVUM` | browser | deploy block, so event scans start there |
+| `PROVIDER_PRIVATE_KEY` | server | settlement key of a **test** wallet with a little tQDAY; its address is the provider mandates must name |
+| `PQ_SEED` | server | 32-byte seed of the ML-DSA-65 receipt key (`openssl rand -hex 32`); publish once with `pnpm example publish-pq-key` |
+| `QUOTE_SECRET` | server | 32-byte secret that binds quotes to request ids |
+| `GROQ_API_KEY` | server | model provider key (free tier works) |
+| `TRUSTED_IP_HEADER` | server | `x-vercel-forwarded-for` on Vercel, for rate limits |
 
----
+Your own deployment: `make deploy-aevum ACCOUNT=<foundry keystore>` (or `make deploy-local` on anvil with MockUSD8).
+The autonomous agent: `AGENT_PRIVATE_KEY=… MANDATE_ID=… FAIRMETER=… make agent`.
 
-## Project layout
+## Pricing (testnet)
 
-```
-contracts/            Foundry project
-  src/Checkout.sol      the example contract
-  src/mocks/MockUSD8.sol  local tUSD8 stand-in (anyone can mint)
-  test/                 unit tests + test/fork (real tUSD8 on a fork)
-  script/Deploy.s.sol   deploys to anvil, a fork or Aevum
-packages/aevum/       chain config, ABIs, EIP-3009 typed data, getLogsChunked
-web/                  Next.js app (wagmi + RainbowKit)
-  src/app/page.tsx        Setup check
-  src/app/checkout/       standard + gasless checkout
-  src/app/receipts/       receipt read from the chain
-  src/app/activity/       Paid events, read in 1,000-block chunks
-  src/app/api/relay/      gasless relayer (server-side)
-  src/app/globals.css     every color and font; edit to rebrand
-examples/             runnable TypeScript scripts
-tools/check-shanghai.mjs  fails the build on Cancun-only opcodes
-LICENSE, NOTICE.md     MIT license and third-party licenses
-```
+Per 1,000 tokens, in tUSD8: `gpt-oss-20b` 0.005 in / 0.02 out · `gpt-oss-120b` 0.015 in / 0.06 out · prompt guard
+0.0005 in. The quote is the worst case (guard + draft + check + escalation, each at the token limit); the charge is
+what ran. Rates are in every receipt, and the Verify page recomputes each line.
 
----
+## Business model and path to mainnet
 
-## Commands
+- **Who pays:** teams running agents that call paid AI, data or tool APIs and need a hard budget per agent, per
+  vendor, with an audit trail finance can read.
+- **Who sells:** API providers (AI inference first) that want agent customers without prepaid accounts or card
+  billing, and with proof of every charge.
+- **Revenue:** a small fee per settled request on top of the provider's price (a basis-point take rate), or a
+  hosted gateway for providers who don't want to run one.
+- **Distribution:** the SDK and the gateway route are open source; any provider can put `/api/v1/chat`-style
+  metering in front of an existing API in a day.
+- **Roadmap:** (1) verify ML-DSA-65 receipts on-chain once QDay's Phase 2 precompile is live; (2) batch settlement
+  from a queue (`settleBatch` already skips bad items instead of reverting the batch); (3) shared rate-limit store and
+  a provider dispute window; (4) ERC-8004 identity for providers; (5) mainnet with USD8 in Q1 2027.
 
-```
-make install        Fetch Solidity libs and JS packages
-make build          Compile contracts and check they are Shanghai-safe
-make test           Unit tests (local, no network)
-make test-fork      Tests against the real tUSD8 on a local fork of Aevum
-make check          Build, tests and typecheck (CI also runs pnpm build)
-make anvil          Empty local chain (31337) with Aevum's EVM rules
-make fork           Local copy of Aevum testnet on 127.0.0.1:8555 (chain 440050)
-make deploy-local   Deploy MockUSD8 + Checkout to `make anvil`
-make deploy-fork    Deploy Checkout (real tUSD8) to `make fork`
-make deploy-aevum   Deploy Checkout to Aevum testnet (ACCOUNT=<keystore>)
-make mint           `make anvil` only: mint MockUSD8 (TO=, CHECKOUT=, AMOUNT=)
-make deal           `make fork` only: give TO tUSD8 and tQDAY
-make dev            Start the web app on http://localhost:3000
-```
+## Known limits (honest list)
 
-Examples (copy `examples/.env.example` to `examples/.env` first):
+- Testnet only, test tokens only; no audit. The provider key in the demo is a test key.
+- The gateway's per-process rails (rate limits, "served once" set) live in memory; on serverless they are per
+  instance. The on-chain rails (caps, one settlement per request) are global.
+- The provider carries the risk of one unpaid request if an owner revokes between the answer and the settlement.
+- ML-DSA-65 signatures are verified off-chain until QDay ships its precompile.
+- Model routing quality is a heuristic: the cheap model grades its own draft. It escalated the hard arithmetic
+  question in our runs, but it can be over-confident.
+- Explorer contract verification is not available on Aevum yet (per the starter kit). Source for the deployed
+  contract: this repository at the commit tagged `deployed-aevum`.
 
-```bash
-pnpm example check-setup      # chain, block, gas price and balances of ADDRESS
-pnpm example pay-gasless      # BUYER_KEY signs, RELAYER_KEY submits
-pnpm example read-payments    # every Paid event, 1,000 blocks at a time
-```
+## Credits and licenses
 
----
-
-## Submitting your project
-
-Make it easy for judges to check your on-chain activity:
-
-- Contract addresses on Aevum testnet (`44005`), with explorer links.
-- A link to the exact commit you deployed.
-- A few transaction hashes that show your app working (the receipt page and the activity page show them).
-- A short demo video or a live URL.
-
-Read the official rules on the DoraHacks challenge page. They win over anything here.
-
-### Licenses and credit
-
-The organizers confirmed that boilerplate, scaffolding and templates are allowed, as long as their license permits the use. This kit is MIT licensed, so you can build on it.
-
-- Put a permissive open-source license on your repo, usually MIT or Apache 2.0.
-- If you start from this kit, keep its `LICENSE` file (or its copyright notice) and say so in your README, for example: "Based on Aevum Starter Kit (MIT, PQA Labs)".
-- Keep the original copyright and license headers in any file you copy from another project.
-- Put a short comment above any code snippet you borrow, naming the source repo, author and license.
-- List your third-party dependencies and their licenses in your README or a `NOTICE` file. [NOTICE.md](NOTICE.md) shows one way to do it.
-- If you copy a whole directory or library, keep its original `LICENSE` file in that folder.
-
----
-
-## FAQ
-
-**Do I have to use `Checkout`?** No. It's an example. Keep the parts you need (`packages/aevum`, the chunked log reader, the setup checker) and replace the rest.
-
-**Can I use account abstraction?** It isn't required for this challenge, and there's no officially supported bundler or paymaster. A normal wallet plus tUSD8 payments is enough. To spare users gas, use the gasless checkout in this kit (EIP-3009 with a relayer). For budgets, limits, expiry and revoke, write them into your own contract. You can deploy your own ERC-4337 setup if you want to, but the team won't support or debug it.
-
-**Can I use Hardhat?** Yes. Set `evmVersion: "shanghai"` in the Solidity settings, and `hardfork: "shanghai"` for the Hardhat network.
-
-**My transaction fails with `invalid opcode`.** You compiled for Cancun. See [Things that differ from Ethereum](#things-that-differ-from-ethereum).
-
-**`eth_getLogs` errors on a big range.** Split it into 1,000-block chunks with `getLogsChunked`.
-
-**Where do I ask for help?** In the [QDay Discord](https://discord.gg/bYPhjmrSfK)'s Builder Challenge channels (verify first to see them), Monday to Friday, 10:00 to 18:00 HKT.
-
-**`pnpm audit` reports high advisories in `zod` and `decode-uri-component`.** Both come in through WalletConnect (`@reown/appkit-wallet` pins `zod` 3.22.4; `@walletconnect/utils` 2.21 uses `query-string`). They run only in the browser, are only reached when you set `NEXT_PUBLIC_WC_PROJECT_ID`, and at worst slow down the user's own tab. The relay route doesn't load them. The fix is upstream: RainbowKit moving to wagmi 3 brings WalletConnect 2.26, which drops `query-string`. Forcing newer versions with `pnpm.overrides` swaps in major versions WalletConnect wasn't tested with, so the kit doesn't.
-
----
-
-MIT licensed, © 2026 PQA Labs. See [LICENSE](LICENSE). Third-party licenses are listed in [NOTICE.md](NOTICE.md).
+MIT. Built on the [Aevum Starter Kit](https://github.com/qday-io/aevum-starter-kit) (MIT, PQA Labs): chain config,
+`getLogsChunked`, the setup checker and the app shell. Third-party packages and their licenses: [NOTICE.md](NOTICE.md).
+Post-quantum signatures: [`@noble/post-quantum`](https://github.com/paulmillr/noble-post-quantum) (MIT), ML-DSA-65
+per FIPS 204. Models served by Groq. All FairMeter code was written during the challenge window (Nov 16 – Dec 11, 2026).
