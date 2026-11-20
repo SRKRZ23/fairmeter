@@ -40,4 +40,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r typecheck
+      - name: SDK tests (receipts, ML-DSA-65, quote binding, pricing)
+        run: pnpm --filter @fairmeter/sdk test
       - run: pnpm build

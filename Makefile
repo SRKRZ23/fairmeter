@@ -1,4 +1,4 @@
-# Aevum Starter Kit. Run `make help` for the list.
+# FairMeter (built on the Aevum Starter Kit). Run `make help` for the list.
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
@@ -17,7 +17,7 @@ AMOUNT      ?= 100
 # `make fork` runs under its own chain ID so wallets and signatures never mix it up with the real testnet.
 FORK_CHAIN  := 440050
 
-.PHONY: help install build test test-fork check anvil fork deploy-local deploy-fork deploy-aevum mint deal dev
+.PHONY: help install build test test-fork test-sdk check anvil fork deploy-local deploy-fork deploy-aevum mint deal dev agent smoke
 
 help: ## Show this list
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36mmake %-14s\033[0m %s\n", $$1, $$2}'
@@ -36,7 +36,10 @@ test: ## Unit tests (local, no network)
 test-fork: ## Tests against the real tUSD8 on a local fork of Aevum (no funds needed)
 	cd contracts && forge test --match-path 'test/fork/*' --fork-url $(AEVUM_RPC) -vv
 
-check: build test test-fork ## Everything CI runs
+test-sdk: ## SDK tests (receipts, ML-DSA-65, quote binding, pricing; ONLINE=1 also checks the EIP-712 digest on Aevum)
+	pnpm --filter @fairmeter/sdk test
+
+check: build test test-fork test-sdk ## Everything CI runs
 	pnpm -r typecheck
 
 anvil: ## Empty local chain (31337) with Aevum's EVM rules
@@ -45,27 +48,27 @@ anvil: ## Empty local chain (31337) with Aevum's EVM rules
 fork: ## Local copy of Aevum testnet on 127.0.0.1:8555 (chain 440050)
 	anvil --fork-url $(AEVUM_RPC) --hardfork shanghai --chain-id $(FORK_CHAIN) --port $(FORK_PORT)
 
-deploy-local: ## Deploy MockUSD8 + Checkout to `make anvil`
-	cd contracts && forge script script/Deploy.s.sol --rpc-url $(LOCAL_RPC) --broadcast --unlocked --sender $(ANVIL_0)
+deploy-local: ## Deploy MockUSD8 + FairMeter to `make anvil`
+	cd contracts && forge script script/DeployFairMeter.s.sol --rpc-url $(LOCAL_RPC) --broadcast --unlocked --sender $(ANVIL_0)
 
 # Deploy from a random address nobody has the key for (anvil impersonates it), not from a public
 # anvil account. Otherwise the fork's contract addresses could be claimed on the real testnet by
 # anyone holding that public key.
-deploy-fork: ## Deploy Checkout (real tUSD8) to `make fork`
+deploy-fork: ## Deploy FairMeter (real tUSD8) to `make fork`
 	@test "$$(cast chain-id --rpc-url $(FORK_RPC))" = "$(FORK_CHAIN)" || (echo "This only works on 'make fork'." && exit 1)
 	@DEPLOYER=$$(cast to-check-sum-address 0x$$(openssl rand -hex 20)); \
 	  cast rpc anvil_setBalance $$DEPLOYER 0x8ac7230489e80000 --rpc-url $(FORK_RPC) > /dev/null && \
 	  cast rpc anvil_impersonateAccount $$DEPLOYER --rpc-url $(FORK_RPC) > /dev/null && \
 	  echo "Deploying from throwaway address $$DEPLOYER (no private key exists for it)" && \
-	  cd contracts && MERCHANT=$${MERCHANT:-$(ANVIL_0)} forge script script/Deploy.s.sol --rpc-url $(FORK_RPC) --broadcast --unlocked --sender $$DEPLOYER
+	  cd contracts && forge script script/DeployFairMeter.s.sol --rpc-url $(FORK_RPC) --broadcast --unlocked --sender $$DEPLOYER
 
-deploy-aevum: ## Deploy Checkout to Aevum testnet. Needs ACCOUNT=<keystore name> (see README)
+deploy-aevum: ## Deploy FairMeter to Aevum testnet. Needs ACCOUNT=<keystore name> (see README)
 	@test -n "$(ACCOUNT)" || (echo "Set ACCOUNT=<name>. Create one with: cast wallet import <name> --interactive" && exit 1)
-	cd contracts && forge script script/Deploy.s.sol --rpc-url $(AEVUM_RPC) --broadcast --legacy --account $(ACCOUNT)
+	cd contracts && forge script script/DeployFairMeter.s.sol --rpc-url $(AEVUM_RPC) --broadcast --legacy --account $(ACCOUNT)
 
-mint: ## `make anvil` only: mint AMOUNT MockUSD8 to TO. Needs CHECKOUT=<address>
-	@test -n "$(TO)" -a -n "$(CHECKOUT)" || (echo "Usage: make mint TO=0x... CHECKOUT=0x... [AMOUNT=100]" && exit 1)
-	cast send $$(cast call $(CHECKOUT) "token()(address)" --rpc-url $(LOCAL_RPC)) "mint(address,uint256)" $(TO) $$(cast parse-units $(AMOUNT) 6) \
+mint: ## `make anvil` only: mint AMOUNT MockUSD8 to TO. Needs FAIRMETER=<address>
+	@test -n "$(TO)" -a -n "$(FAIRMETER)" || (echo "Usage: make mint TO=0x... FAIRMETER=0x... [AMOUNT=100]" && exit 1)
+	cast send $$(cast call $(FAIRMETER) "token()(address)" --rpc-url $(LOCAL_RPC)) "mint(address,uint256)" $(TO) $$(cast parse-units $(AMOUNT) 6) \
 	  --rpc-url $(LOCAL_RPC) --unlocked --from $(ANVIL_0) > /dev/null
 	@echo "Minted $(AMOUNT) to $(TO)."
 
@@ -79,5 +82,11 @@ deal: ## `make fork` only: give TO AMOUNT tUSD8 and 10 tQDAY for gas
 	@cast send $(TUSD8) "mint(address,uint256)" $(TO) $$(cast parse-units $(AMOUNT) 6) --from $(TUSD8_MM) --unlocked --rpc-url $(FORK_RPC) > /dev/null
 	@echo "tUSD8 balance of $(TO): $$(cast call $(TUSD8) 'balanceOf(address)(uint256)' $(TO) --rpc-url $(FORK_RPC))"
 
-dev: ## Start the web app on http://localhost:3000
+dev: ## Start the web app (gateway + UI) on http://localhost:3000
 	pnpm dev
+
+agent: ## Run the autonomous agent example. Needs AGENT_PRIVATE_KEY, MANDATE_ID, FAIRMETER (see README)
+	pnpm example agent
+
+smoke: ## One live cycle on Aevum with cast: approve, open, sign, settle, replay check, revoke. Needs FAIRMETER and keystores (see scripts/)
+	bash scripts/smoke-aevum.sh

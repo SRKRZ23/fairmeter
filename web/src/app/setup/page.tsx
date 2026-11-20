@@ -6,7 +6,7 @@ import { useAccount, useBalance, useBytecode, useReadContract, useWatchAsset } f
 import { CheckIcon, CrossIcon, WarnIcon } from "@/components/Icons";
 import { useToken } from "@/components/useToken";
 import { useNetwork } from "@/lib/network";
-import { short } from "@/lib/order";
+import { short } from "@/lib/fm";
 
 type Status = "ok" | "warn" | "bad" | "idle";
 interface Check {
@@ -26,7 +26,7 @@ export default function SetupPage() {
   const { net, select } = useNetwork();
   const appChain = net.chain;
   const chainMode = net.key;
-  const checkoutAddress = net.fairmeter;
+  const meterAddress = net.fairmeter;
   const { address, isConnected, chainId, connector } = useAccount();
   const onChain = isConnected && chainId === appChain.id;
   const token = useToken();
@@ -40,7 +40,7 @@ export default function SetupPage() {
     chainId: appChain.id,
     query: { enabled: onChain && Boolean(token.address) },
   });
-  const code = useBytecode({ address: checkoutAddress, chainId: appChain.id, query: { enabled: Boolean(checkoutAddress) } });
+  const code = useBytecode({ address: meterAddress, chainId: appChain.id, query: { enabled: Boolean(meterAddress) } });
 
   // Wallets don't list tokens on custom networks by themselves. This asks the wallet to show it
   // on the network it is on now (the app's network, since the button only shows when onChain).
@@ -86,13 +86,13 @@ export default function SetupPage() {
         : chainMode === "aevum"
           ? { title: "tUSD8 balance", status: "warn", value: "0 tUSD8", detail: DISCORD_FAUCET, action: addToken }
           : { title: `${token.symbol} balance`, status: "warn", value: "0", detail: chainMode === "fork" ? "On a fork, give yourself tUSD8 with `make deal TO=<address>`." : "MockUSD8 lets anyone mint: `make mint TO=<address>`.", action: addToken },
-    !checkoutAddress
+    !meterAddress
       ? { title: "FairMeter contract", status: "warn", value: "not set", detail: chainMode === "aevum" ? "Deploy it with `forge script script/DeployFairMeter.s.sol`, then set NEXT_PUBLIC_FAIRMETER_AEVUM in web/.env.local." : chainMode === "fork" ? "Deploy FairMeter to the fork, then set NEXT_PUBLIC_FAIRMETER_FORK in web/.env.local." : "Deploy it with `make deploy-local`, then set NEXT_PUBLIC_CHECKOUT_LOCAL in web/.env.local." }
       : code.isLoading
-        ? { title: "FairMeter contract", status: "idle", value: short(checkoutAddress), detail: "Looking it up…" }
+        ? { title: "FairMeter contract", status: "idle", value: short(meterAddress), detail: "Looking it up…" }
         : code.data && code.data !== "0x"
-          ? { title: "FairMeter contract", status: "ok", value: short(checkoutAddress), detail: "Deployed and reachable." }
-          : { title: "FairMeter contract", status: "bad", value: short(checkoutAddress), detail: `No contract at this address on ${appChain.name}. Check the address in web/.env.local.` },
+          ? { title: "FairMeter contract", status: "ok", value: short(meterAddress), detail: "Deployed and reachable." }
+          : { title: "FairMeter contract", status: "bad", value: short(meterAddress), detail: `No contract at this address on ${appChain.name}. Check the address in web/.env.local.` },
   ];
 
   const passed = checks.filter((c) => c.status === "ok").length;
