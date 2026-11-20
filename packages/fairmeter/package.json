@@ -1,0 +1,26 @@
+{
+  "name": "@fairmeter/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Pay-per-request settlement on QDay Aevum: agent-signed usage authorizations, dual-signed (ECDSA + ML-DSA-65) usage receipts, a 402 quote protocol, client and server helpers.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@noble/post-quantum": "0.7.1"
+  },
+  "peerDependencies": {
+    "viem": "^2.57.0"
+  },
+  "scripts": {
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}
