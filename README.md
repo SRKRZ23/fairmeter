@@ -14,7 +14,8 @@ key and with a post-quantum ML-DSA-65 key whose hash is published on-chain.
 | Measured on Aevum (Nov 20) | 7 paid requests: agents authorized 0.6535 tUSD8, the provider charged 0.0878 tUSD8 (13.4%). Live totals: [Activity](https://fairmeter.vercel.app/activity) |
 | Cheapest outcome | a prompt-injection attempt, blocked for 0.00002 tUSD8 (only the safety check is billed) |
 | Escalation | a modular-arithmetic question the cheap model graded 1/5 went to the 120B model: correct answer, 0.0345 of 0.042 authorized |
-| Tests | 27 contract tests (incl. fuzzed money conservation) · 2 fork tests on the real tUSD8 · 8 SDK tests (incl. the EIP-712 digest checked against the deployed contract) |
+| Tests | 27 contract tests (incl. fuzzed money conservation) · 2 fork tests on the real tUSD8 · 8 SDK tests (incl. the EIP-712 digest checked against the deployed contract) · a browser end-to-end test of the live app (below) |
+| Demo video | a recorded run of that end-to-end test on the live app (link in the DoraHacks submission) |
 
 ---
 
@@ -144,6 +145,22 @@ The [Activity page](https://fairmeter.vercel.app/activity) lists every event, re
    authorized/charged/returned split, and the settlement transaction.
 4. **Verify** → the receipt passes 7 checks. Change one digit of the charge: the hash and both signatures fail.
 5. **Mandates** → *Revoke*: the unspent balance is back in your wallet in one transaction.
+
+## Browser end-to-end test
+
+[`examples/src/e2e-browser.ts`](examples/src/e2e-browser.ts) drives the deployed app in a real Chrome over the
+DevTools protocol. A scripted EIP-1193 wallet (announced via EIP-6963) stands in for MetaMask and signs with a test
+key. It opens a mandate gaslessly, asks the Easy, Hard and Attack presets, verifies a receipt, checks that a tampered
+receipt fails, revokes, and reads the activity, asserting every step.
+
+```bash
+OWNER_PRIVATE_KEY=0x<test key with tUSD8> APP=https://fairmeter.vercel.app pnpm example e2e   # RECORD=1 saves frames
+```
+
+Run of Nov 20 (124 s, PASS): mandate #5 · Easy: cheap, charged 0.001932 of 0.041806 · Hard: escalated, charged
+0.03479 of 0.04201 · Attack: blocked, charged 0.000022 of 0.042851 · all receipts verified and settled on Aevum.
+The first run of this test found a real bug (the Verify page cached results by the receipt's claimed hash, so an
+edited receipt kept showing green); it is fixed.
 
 ## Use it from code
 
